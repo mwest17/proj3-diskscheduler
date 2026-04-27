@@ -67,9 +67,7 @@ int SSTF(int n, int h, int d, int r,
          int cur_iteration,
          int prev) {
 
-    print_vector(pending);
-
-    int prev_pos = (prev > -1) ? requested_number[prev] : 50;
+    int prev_pos = (prev > -1) ? requested_number[prev] : h;
     int closest_index = pending->len - 1, min_dist = INT_MAX;
     for (int i = 0; i < pending->len; i++) {
         // check if difference from requested_number[prev] to requested_number[i]
@@ -105,19 +103,20 @@ void scheduler(int n, int h, int d, int r,
 
     for (int i = 0; i < r; i++) {
         // Add any newly available jobs to the pending list
+        // printf("\nIteration: %d, cur_time: %d\n", i, cur_time);
         for (int i = 0; i < r; i++) {
             if (prev_start < arrival_time[i] && arrival_time[i] <= cur_time) {
                 append(&pending, i);
-                // printf("New: %d ", i);
             }
         }
-        // printf("\n");
-        prev_start = cur_time;
+
+        // print_vector(&pending);
 
         // Choose a request
         int c = (*scheduling_rule)(n, h, d, r, arrival_time, requested_number, &pending, i, prev);
         // Add wait time if there was any
         cur_time += max(arrival_time[c] - cur_time, 0);
+        prev_start = cur_time;
         track_ordering[i] = requested_number[c];
         
         int seek_time;
@@ -126,7 +125,7 @@ void scheduler(int n, int h, int d, int r,
             seek_time = abs(track_ordering[i] - track_ordering[i-1]);
         } else {
             // Seek time from starting position
-            seek_time = abs(track_ordering[i] - 50);
+            seek_time = abs(track_ordering[i] - h);
         }
         *total_seek_time += seek_time;
         cur_time += seek_time;
@@ -183,7 +182,6 @@ int main() {
 
     // Print all output
     for (int i = 0; i < r; i++) {
-        // printf("Correct: %d ", requested_number[i]);
         printf("%d ", track_ordering[i]);
     }
     printf("\n");
