@@ -17,7 +17,7 @@ void init(vector* v, int size) {
     v->size = size;
 }
 
-void append(vector* v, int val) {
+void vector_append(vector* v, int val) {
     if (v->len < v->size) {
         v->arr[v->len] = val;
         v->len++;
@@ -106,7 +106,7 @@ void scheduler(int n, int h, int d, int r,
         // printf("\nIteration: %d, cur_time: %d\n", i, cur_time);
         for (int i = 0; i < r; i++) {
             if (prev_start < arrival_time[i] && arrival_time[i] <= cur_time) {
-                append(&pending, i);
+                vector_append(&pending, i);
             }
         }
 
@@ -136,112 +136,10 @@ void scheduler(int n, int h, int d, int r,
 }
 
 
-
-void scheduler(int n, int h, int d, int r,
-               const int* arrival_time,      // Array of arrival times
-               const int* requested_number,  // Array of requested track numbers
-               int (*scheduling_rule)(int, int, int, int, const int*, const int*, vector*, int, int),         // Ptr to scheduling algorithm function
-               int* track_ordering,          // Ordering of served tracks
-               int* total_seek_time,         // Total seek time
-               int* last_completion_time) {  // Completion time of last served request  
-    int cur_time = 0;
-    *total_seek_time = 0;
-    int prev = -1, prev_start = -1;
-    vector pending;
-    init(&pending, r);
-
-    for (int i = 0; i < r; i++) {
-        // Add any newly available jobs to the pending list
-        // printf("\nIteration: %d, cur_time: %d\n", i, cur_time);
-        for (int i = 0; i < r; i++) {
-            if (prev_start < arrival_time[i] && arrival_time[i] <= cur_time) {
-                append(&pending, i);
-            }
-        }
-
-        // print_vector(&pending);
-
-        // Choose a request
-        int c = (*scheduling_rule)(n, h, d, r, arrival_time, requested_number, &pending, i, prev);
-        // Add wait time if there was any
-        cur_time += max(arrival_time[c] - cur_time, 0);
-        prev_start = cur_time;
-        track_ordering[i] = requested_number[c];
-        
-        int seek_time;
-        if (i > 0) {
-            // Find seek time from previous position
-            seek_time = abs(track_ordering[i] - track_ordering[i-1]);
-        } else {
-            // Seek time from starting position
-            seek_time = abs(track_ordering[i] - h);
-        }
-        *total_seek_time += seek_time;
-        cur_time += seek_time;
-
-        prev = c;
-    }
-    *last_completion_time = cur_time;
-}
-
-
-void directional_scheduler(int n, int h, int d, int r,
-               const int* arrival_time,      // Array of arrival times
-               const int* requested_number,  // Array of requested track numbers
-               int (*scheduling_rule)(int, int, int, int, const int*, const int*, vector*, int, int),         // Ptr to scheduling algorithm function
-               int* track_ordering,          // Ordering of served tracks
-               int* total_seek_time,         // Total seek time
-               int* last_completion_time) {  // Completion time of last served request  
-    int cur_time = 0;
-    *total_seek_time = 0;
-    int prev = -1, prev_start = -1;
-    vector pending_up, pending_down;
-    init(&pending_up, r);
-    init(&pending_down, r);
-
-    for (int i = 0; i < r; i++) {
-        // Add any newly available jobs to the pending list
-        // printf("\nIteration: %d, cur_time: %d\n", i, cur_time);
-        for (int i = 0; i < r; i++) {
-            if (prev_start < arrival_time[i] && arrival_time[i] <= cur_time && ) {
-                if (requested_number[prev] < requested_number[i]) {
-                    append(&pending_up, i);
-                } else {
-                    append(&pending_down, i);
-                }
-            }
-        }
-
-        // print_vector(&pending);
-
-        // Choose a request
-        // Pass in cur_time by reference, add to it based on rotation needed 
-        int c = (*scheduling_rule)(n, h, d, r, arrival_time, requested_number, &pending, i, prev);
-        
-        // Add wait time if there was any
-        cur_time += max(arrival_time[c] - cur_time, 0);
-        prev_start = cur_time;
-        track_ordering[i] = requested_number[c];
-        
-        int seek_time;
-        if (i > 0) {
-            // Find seek time from previous position
-            seek_time = abs(track_ordering[i] - track_ordering[i-1]);
-        } else {
-            // Seek time from starting position
-            seek_time = abs(track_ordering[i] - h);
-        }
-        *total_seek_time += seek_time;
-        cur_time += seek_time;
-
-        prev = c;
-    }
-    *last_completion_time = cur_time;
-}
 
 
 /*
-Create pending requests vector (OF HEAD DIRECTION)
+Add any pending requests that are in direction of head (requested_pos - cur_pos )to a vector (OF HEAD DIRECTION)
 Create a 2nd pending vector (OPPOSITE HEAD DIRECTION)
 
 If 1st is nonempty, serve the nearest one of the 1st
@@ -257,6 +155,153 @@ If both are empty, return cur_iter and jump to it.
 Movement to a track is handled by smaller functions. 
 This determines the seek time, resulting direction, and if lists get switched.
 SCAN:
+    cur_pos = H
+    for all requests    
+        if there are any pending in head direction (serve logic)
+            choose nearest one
+            move to it
+            Add any vectors that became available since last job selection to vectors
+        else if there are any pending in other direction (direction chance logic)
+            CHOOSE LOGIC HERE
+                Move head until it reaches an endpoint
+                add seek time spent
+                change direction d *= -1
+                swap pending vectors
+            END CHOOSE LOGIC
+            Add any vectors that became available since last job selection to vectors
+            i--         
+        else (wait logic)
+            wait until next one(s)
+            add tracks to vectors (should we choose the best ones if all arriving at same time?)
+            i--
+*/
+
+void add_request(int index, int requested_track, int cur_pos, int dir, vector* forward, vector* backward) {
+    // If positive, it is up, if negative it is down
+    int distance = requested_track - cur_pos;
+
+    vector* pending;
+    if (distance > 0) {
+        pending = (dir == 1) ? forward: backward;
+    } else if (distance < 0) {
+        pending = (dir == -1) ? forward: backward;
+    }
+    vector_append(pending, index);
+}
+
+
+int choose_closest(const int* requested_number,
+                   vector* pending,
+                   int cur_pos) {
+
+    int closest_index, min_dist = INT_MAX;
+    for (int i = 0; i < pending->len; i++) {
+        int distance = abs(cur_pos - requested_number[pending->arr[i]]);
+        if (distance < min_dist){
+            closest_index = i;
+            min_dist = distance;
+        }
+    }
+
+    return delete(pending, closest_index);
+}
+
+
+int SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward) {
+    // Move head until it reaches an endpoint
+    // add seek time spent
+    int seek_time;
+    if (*d == 1) {
+        seek_time = (n - 1) - *cur_pos;
+        *cur_time += seek_time;
+        *cur_pos = n - 1;
+    } else {
+        seek_time = *cur_pos;
+        *cur_time += seek_time;
+        *cur_pos = 0;
+    }
+
+    // change direction d *= -1
+    *d *= -1;
+    // swap pending vectors
+    vector* tmp = *pending_forward;
+    *pending_forward = *pending_backward;
+    *pending_backward = tmp;
+
+    return seek_time;
+}
+
+void directional_scheduler(int n, int h, int d, int r,
+               const int* arrival_time,      // Array of arrival times
+               const int* requested_number,  // Array of requested track numbers
+               int (*algo)(int, int*, int*, int*, vector**, vector**),         // Ptr to direction switch handler
+               int* track_ordering,          // Ordering of served tracks
+               int* total_seek_time,         // Total seek time
+               int* last_completion_time) {
+    int cur_pos = h, cur_time = 0;
+    vector *pending_forward = (vector*) malloc(sizeof(vector)*2), *pending_backward;
+    pending_backward = pending_forward + 1;
+    init(pending_forward, r);
+    init(pending_backward, r);
+
+    for (int i = 0; i < r;) {
+        // printf("cur_time: %d, seek_time: %d, cur_pos: %d\n", cur_time, *total_seek_time, cur_pos);
+        int start_time = cur_time;
+
+        if (pending_forward->len > 0) {
+            // printf("1st case\n");
+            // Choose nearest in pending forward, c
+            int c = choose_closest(requested_number, pending_forward, cur_pos);
+            track_ordering[i] = requested_number[c];
+
+            // Find seek time from previous position
+            int seek_time = abs(track_ordering[i] - cur_pos);
+            *total_seek_time += seek_time;
+            cur_time += seek_time;
+            cur_pos = track_ordering[i];
+
+            // Add any new pending from range start_time to cur_time
+            for (int j = 0; j < r; j++) {
+                if (start_time < arrival_time[j] && arrival_time[j] <= cur_time) {
+                    add_request(j, requested_number[j], cur_pos, d, pending_forward, pending_backward);
+                }
+            }
+        
+            i++;
+        } else if (pending_backward->len > 0) {
+            // printf("2nd case\n");
+            // Function call to opposite direction logic
+            *total_seek_time += algo(n, &d, &cur_time, &cur_pos, &pending_forward, &pending_backward);
+
+            // Add any new pending from range start_time to cur_time
+            for (int j = 0; j < r; j++) {
+                if (start_time < arrival_time[j] && arrival_time[j] <= cur_time) {
+                    add_request(j, requested_number[j], cur_pos, d, pending_forward, pending_backward);
+                }
+            }
+        } else {
+            // printf("3rd case\n");
+            // Wait for next track request (ie one at i)
+            cur_time = arrival_time[i];
+            // print_vector(pending_forward);
+            // print_vector(pending_backward);
+            
+            for (int j = i; j < r; j++) {
+                if (arrival_time[j] == cur_time) {
+                    add_request(j, requested_number[j], cur_pos, d, pending_forward, pending_backward);
+                }
+            }
+        }
+    }
+    *last_completion_time = cur_time;   
+}
+
+
+
+/*
+
+
+
     if d == -1 (down):
         move down until 0
     else if d == 1 (up):
@@ -289,7 +334,7 @@ C-LOOK
 
 
 
-int main() {
+int main() { 
     char alg[ALGORITHM_STRING_SIZE + 1] = {'\0'};
     char direction[5] = {'\0'};
     int n = 0, h = 0, d = 0, r = 0;
@@ -327,7 +372,7 @@ int main() {
         scheduler(n, h, d, r, arrival_time, requested_number, SSTF, track_ordering, &seek_time, &last_completion_time);
     } else  if (strcmp(alg, "SCAN") == 0) {
         // Run SCAN Algorithm
-
+        directional_scheduler(n, h, d, r, arrival_time, requested_number, SCAN, track_ordering, &seek_time, &last_completion_time);
     } else  if (strcmp(alg, "C-SCAN") == 0) {
         // Run C-SCAN Algorithm
 
