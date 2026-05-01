@@ -293,13 +293,15 @@ int C_SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward,
     if (*d == 1) {
         seek_time = find_seek(*cur_pos, n - 1, n, *d);
         *cur_pos = n - 1;
-        seek_time += find_seek(*cur_pos, 0, n, -1*(*d)) - 1;
+        seek_time += find_seek(*cur_pos, 0, n, -1*(*d));
         *cur_time += seek_time;
+        *cur_pos = 0;
     } else {
         seek_time = find_seek(*cur_pos, 0, n, *d);
         *cur_pos = 0;
-        seek_time += find_seek(*cur_pos, n-1, n, -1*(*d)) - 1;
+        seek_time += find_seek(*cur_pos, n-1, n, -1*(*d));
         *cur_time += seek_time;
+        *cur_pos = n - 1;
     }
 
     // Place all backwards in forward
