@@ -266,11 +266,11 @@ int SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, v
     // add seek time spent
     int seek_time;
     if (*d == 1) {
-        seek_time = (n - 1) - *cur_pos;
+        seek_time = find_seek(*cur_pos, n-1, n, *d);
         *cur_time += seek_time;
         *cur_pos = n - 1;
     } else {
-        seek_time = *cur_pos;
+        seek_time = find_seek(*cur_pos, 0, n, *d);
         *cur_time += seek_time;
         *cur_pos = 0;
     }
