@@ -253,7 +253,7 @@ int choose_closest(int d, int n, int cur_iter,
             delete(pending, here);
         }
     } else {
-        printf("%d\n", closest_index);
+        // printf("%d\n", closest_index);
         selected = delete(pending, closest_index);
     }
 
@@ -261,7 +261,7 @@ int choose_closest(int d, int n, int cur_iter,
 }
 
 
-int SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward) {
+int SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward, const int* requested_number) {
     // Move head until it reaches an endpoint
     // add seek time spent
     int seek_time;
@@ -286,18 +286,20 @@ int SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, v
 }
 
 
-int C_SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward) {
+int C_SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward, const int* requested_number) {
     // Move head until it reaches an endpoint
     // add seek time spent
     int seek_time;
     if (*d == 1) {
-        seek_time = (n - 1) - *cur_pos;
-        *cur_time += seek_time;
+        seek_time = find_seek(*cur_pos, n - 1, n, *d);
         *cur_pos = n - 1;
-    } else {
-        seek_time = *cur_pos;
+        seek_time += find_seek(*cur_pos, 0, n, -1*(*d)) - 1;
         *cur_time += seek_time;
+    } else {
+        seek_time = find_seek(*cur_pos, 0, n, *d);
         *cur_pos = 0;
+        seek_time += find_seek(*cur_pos, n-1, n, -1*(*d)) - 1;
+        *cur_time += seek_time;
     }
 
     // Place all backwards in forward
@@ -309,7 +311,7 @@ int C_SCAN(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward,
 }
 
 
-int LOOK(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward) {
+int LOOK(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward, const int* requested_number) {
     // change direction d *= -1
     *d *= -1;
     // swap pending vectors
@@ -321,19 +323,22 @@ int LOOK(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, v
 }
 
 
-int C_LOOK(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward) {
+int C_LOOK(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward, vector** pending_backward, const int* requested_number) {
     // Move head until it reaches an endpoint
     // add seek time spent
-    int seek_time;
-    if (*d == 1) {
-        seek_time = (n - 1) - *cur_pos;
-        *cur_time += seek_time;
-        *cur_pos = n - 1;
-    } else {
-        seek_time = *cur_pos;
-        *cur_time += seek_time;
-        *cur_pos = 0;
+    int furthest, max = 0;
+    for (int i = 0; i < (*pending_backward)->len; i++) {
+        int pos = requested_number[(*pending_backward)->arr[i]];
+        int dist = find_seek(*cur_pos, pos, n, -1*(*d));
+        if (dist > max) {
+            furthest = pos;
+            max = dist;
+        }
     }
+    
+    int seek_time = find_seek(*cur_pos, furthest, n, -1*(*d));
+    *cur_time += seek_time;
+    *cur_pos = furthest;
 
     // Place all backwards in forward
     for (int i = (*pending_backward)->len - 1; i >= 0; i--) {
@@ -347,7 +352,7 @@ int C_LOOK(int n, int* d, int* cur_time, int* cur_pos, vector** pending_forward,
 void directional_scheduler(int n, int h, int d, int r,
                const int* arrival_time,      // Array of arrival times
                const int* requested_number,  // Array of requested track numbers
-               int (*algo)(int, int*, int*, int*, vector**, vector**),         // Ptr to direction switch handler
+               int (*algo)(int, int*, int*, int*, vector**, vector**, const int*),         // Ptr to direction switch handler
                int* track_ordering,          // Ordering of served tracks
                int* total_seek_time,         // Total seek time
                int* last_completion_time) {
@@ -371,7 +376,7 @@ void directional_scheduler(int n, int h, int d, int r,
             int count = 0;
             int c = choose_closest(d, n, i, requested_number, track_ordering, pending_forward, cur_pos, &count);
             i += count;
-            printf("c: %d\n", c);
+            // printf("c: %d\n", c);
             track_ordering[i] = requested_number[c];
 
             // Find seek time from previous position
@@ -393,7 +398,7 @@ void directional_scheduler(int n, int h, int d, int r,
             printf("2nd case\n");
             #endif
             // Function call to opposite direction logic
-            *total_seek_time += algo(n, &d, &cur_time, &cur_pos, &pending_forward, &pending_backward);
+            *total_seek_time += algo(n, &d, &cur_time, &cur_pos, &pending_forward, &pending_backward, requested_number);
 
             // Add any new pending from range start_time to cur_time
             for (int j = 0; j < r; j++) {
